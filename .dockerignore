@@ -1,0 +1,10 @@
+.git
+.idea
+.gitignore
+target
+*.iml
+*.ipr
+*.iws
+logs
+*.log
+.DS_Store
