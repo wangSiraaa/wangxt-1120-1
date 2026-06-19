@@ -29,6 +29,9 @@ public class BorrowApplicationService extends ServiceImpl<BorrowApplicationMappe
     @Autowired
     private SysUserService sysUserService;
 
+    @Autowired
+    private AnomalyHandleOrderService anomalyHandleOrderService;
+
     public IPage<BorrowApplication> pageQuery(Integer pageNum, Integer pageSize, String applyNo, Long applicantId, Long maskId, String applyStatus, Integer isAbnormal) {
         Page<BorrowApplication> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<BorrowApplication> wrapper = new LambdaQueryWrapper<>();
@@ -85,9 +88,13 @@ public class BorrowApplicationService extends ServiceImpl<BorrowApplicationMappe
             throw new BusinessException("光罩当前状态不可借用");
         }
 
-        boolean cleanLevelMatch = maskInfoService.isCleanLevelMatch(applicant.getCleanLevel(), mask.getCleanLevel());
+        boolean cleanLevelMatch = maskInfoService.isCleanLevelMatch(dto.getCleanLevel(), mask.getCleanLevel());
         if (!cleanLevelMatch) {
-            throw new BusinessException("申请人洁净等级不满足光罩要求，无法借用");
+            throw new BusinessException("申请洁净等级[" + dto.getCleanLevel() + "]不满足光罩要求[" + mask.getCleanLevel() + "]，无法借用");
+        }
+
+        if (anomalyHandleOrderService.isBatchFrozen(dto.getMachineBatch())) {
+            throw new BusinessException("工艺批次[" + dto.getMachineBatch() + "]已被冻结，存在未处理的划伤异常，禁止提交借用申请");
         }
 
         BorrowApplication application = new BorrowApplication();
@@ -98,14 +105,18 @@ public class BorrowApplicationService extends ServiceImpl<BorrowApplicationMappe
         application.setMaskCode(mask.getMaskCode());
         application.setMaskName(mask.getMaskName());
         application.setMachineBatch(dto.getMachineBatch());
+        application.setMachineCode(dto.getMachineCode());
+        application.setCleanLevel(dto.getCleanLevel());
         application.setPurpose(dto.getPurpose());
         application.setExpectReturnDate(dto.getExpectReturnDate());
         application.setApplyStatus("PENDING");
         application.setIsAbnormal(0);
+        application.setSupervisorReviewFlag(0);
         this.save(application);
 
-        log.info("借用申请提交成功，申请单号：{}，申请人：{}，光罩：{}",
-                application.getApplyNo(), applicant.getUserName(), mask.getMaskName());
+        log.info("借用申请提交成功，申请单号：{}，申请人：{}，光罩：{}，机台：{}，批次：{}，洁净等级：{}",
+                application.getApplyNo(), applicant.getUserName(), mask.getMaskName(),
+                dto.getMachineCode(), dto.getMachineBatch(), dto.getCleanLevel());
 
         return application;
     }

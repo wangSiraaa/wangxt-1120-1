@@ -63,6 +63,20 @@ public class BorrowOrder implements Serializable {
 
     private String machineBatch;
 
+    private String machineCode;
+
+    private String cleanLevel;
+
+    private String supervisorReviewStatus;
+
+    private Long supervisorReviewUserId;
+
+    private LocalDateTime supervisorReviewTime;
+
+    private String supervisorReviewRemark;
+
+    private Integer batchFreezeFlag;
+
     private Integer actualBorrowDays;
 
     private String remark;

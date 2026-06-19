@@ -18,7 +18,14 @@ public class BorrowApplyDTO {
     @NotBlank(message = "机台批次不能为空")
     private String machineBatch;
 
+    @NotBlank(message = "机台编号不能为空")
+    private String machineCode;
+
+    @NotBlank(message = "申请洁净等级不能为空")
+    private String cleanLevel;
+
     private String purpose;
 
+    @NotNull(message = "预计归还日期不能为空")
     private LocalDate expectReturnDate;
 }

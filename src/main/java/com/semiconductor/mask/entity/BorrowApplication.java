@@ -30,11 +30,19 @@ public class BorrowApplication implements Serializable {
 
     private String machineBatch;
 
+    private String machineCode;
+
+    private String cleanLevel;
+
     private String purpose;
 
     private LocalDate expectReturnDate;
 
     private String applyStatus;
+
+    private Integer supervisorReviewFlag;
+
+    private String supervisorReviewReason;
 
     private Long approveUserId;
 

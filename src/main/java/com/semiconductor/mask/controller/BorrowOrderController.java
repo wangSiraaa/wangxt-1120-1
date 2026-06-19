@@ -67,6 +67,22 @@ public class BorrowOrderController {
         return Result.success("外观检查完成", borrowOrderService.appearanceCheck(orderId, checkUserId, checkResult, checkRemark));
     }
 
+    @PostMapping("/supervisor-review-pass/{orderId}")
+    public Result<BorrowOrder> supervisorReviewPass(
+            @PathVariable Long orderId,
+            @RequestParam Long supervisorId,
+            @RequestParam(required = false) String reviewRemark) {
+        return Result.success("主管复核通过", borrowOrderService.supervisorReviewPass(orderId, supervisorId, reviewRemark));
+    }
+
+    @PostMapping("/supervisor-review-reject/{orderId}")
+    public Result<BorrowOrder> supervisorReviewReject(
+            @PathVariable Long orderId,
+            @RequestParam Long supervisorId,
+            @RequestParam(required = false) String reviewRemark) {
+        return Result.success("主管复核驳回", borrowOrderService.supervisorReviewReject(orderId, supervisorId, reviewRemark));
+    }
+
     @PostMapping("/close/{orderId}")
     public Result<BorrowOrder> close(@PathVariable Long orderId) {
         return Result.success("借用单已关闭", borrowOrderService.closeOrder(orderId));

@@ -36,6 +36,15 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
     @Autowired
     private ReturnRecordService returnRecordService;
 
+    @Autowired
+    private MaskLocationMoveService maskLocationMoveService;
+
+    @Autowired
+    private AnomalyHandleOrderService anomalyHandleOrderService;
+
+    @Autowired
+    private AppearanceCheckPhotoService appearanceCheckPhotoService;
+
     public IPage<BorrowOrder> pageQuery(Integer pageNum, Integer pageSize, String orderNo, Long maskId, Long borrowerId, String orderStatus, Integer isAbnormal) {
         Page<BorrowOrder> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<BorrowOrder> wrapper = new LambdaQueryWrapper<>();
@@ -99,16 +108,21 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
         order.setBorrowerId(application.getApplicantId());
         order.setBorrowerName(application.getApplicantName());
         order.setMachineBatch(application.getMachineBatch());
+        order.setMachineCode(application.getMachineCode());
+        order.setCleanLevel(application.getCleanLevel());
         order.setOrderStatus("CREATED");
         order.setIsAbnormal(application.getIsAbnormal());
         order.setAppearanceCheckDone(0);
+        order.setBatchFreezeFlag(0);
+        order.setSupervisorReviewStatus("NONE");
         this.save(order);
 
         application.setBorrowOrderId(order.getId());
         application.setApplyStatus("BORROWED");
         borrowApplicationService.updateById(application);
 
-        log.info("借用单创建成功，单号：{}，关联申请单：{}", order.getOrderNo(), application.getApplyNo());
+        log.info("借用单创建成功，单号：{}，关联申请单：{}，机台：{}，洁净等级：{}",
+                order.getOrderNo(), application.getApplyNo(), order.getMachineCode(), order.getCleanLevel());
         return order;
     }
 
@@ -149,10 +163,14 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
             throw new BusinessException("借用人洁净等级不满足光罩要求，禁止出库");
         }
 
+        boolean transferMismatch = maskLocationMoveService.isTransferCleanLevelMismatch(order.getCleanLevel(), mask.getLocationId());
+
         if (mask.getLocationId() != null) {
             storageLocationService.decrementCount(mask.getLocationId());
             order.setOutLocationId(mask.getLocationId());
         }
+
+        maskLocationMoveService.recordMove(order, mask, libUserId, libUser.getUserName(), "OUT_STOCK");
 
         mask.setStatus("BORROWED");
         mask.setLocationId(null);
@@ -161,12 +179,107 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
         order.setOutLibUserId(libUserId);
         order.setOutLibUserName(libUser.getUserName());
         order.setOutLibTime(LocalDateTime.now());
+
+        if (transferMismatch) {
+            order.setOrderStatus("SUPERVISOR_REVIEW");
+            order.setSupervisorReviewStatus("PENDING");
+            order.setIsAbnormal(1);
+            order.setAbnormalRemark("出库途经非匹配洁净区，自动转主管复核");
+
+            BorrowApplication application = borrowApplicationService.getById(order.getApplyId());
+            if (application != null) {
+                application.setSupervisorReviewFlag(1);
+                application.setSupervisorReviewReason("出库途经非匹配洁净区，需主管复核后方可继续");
+                application.setIsAbnormal(1);
+                application.setAbnormalRemark("出库途经非匹配洁净区，自动转主管复核");
+                borrowApplicationService.updateById(application);
+            }
+
+            log.warn("光罩出库途经非匹配洁净区，借用单转主管复核：orderNo={}, 光罩等级={}, 途经区域等级不匹配",
+                    order.getOrderNo(), order.getCleanLevel());
+        } else {
+            order.setOrderStatus("OUT_STOCK");
+        }
+
+        this.updateById(order);
+
+        log.info("光罩出库成功，借用单号：{}，光罩：{}，操作人：{}，状态：{}",
+                order.getOrderNo(), mask.getMaskCode(), libUser.getUserName(), order.getOrderStatus());
+
+        return order;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public BorrowOrder supervisorReviewPass(Long orderId, Long supervisorId, String reviewRemark) {
+        BorrowOrder order = this.getById(orderId);
+        if (order == null) {
+            throw new BusinessException("借用单不存在");
+        }
+        if (!"SUPERVISOR_REVIEW".equals(order.getOrderStatus())) {
+            throw new BusinessException("借用单当前状态不可主管复核");
+        }
+
+        SysUser supervisor = sysUserService.getById(supervisorId);
+        if (supervisor == null) {
+            throw new BusinessException("主管不存在");
+        }
+        if (!"SUPERVISOR".equals(supervisor.getRoleType())) {
+            throw new BusinessException("只有工艺主管可以复核");
+        }
+
+        order.setSupervisorReviewStatus("APPROVED");
+        order.setSupervisorReviewUserId(supervisorId);
+        order.setSupervisorReviewTime(LocalDateTime.now());
+        order.setSupervisorReviewRemark(reviewRemark);
         order.setOrderStatus("OUT_STOCK");
         this.updateById(order);
 
-        log.info("光罩出库成功，借用单号：{}，光罩：{}，操作人：{}",
-                order.getOrderNo(), mask.getMaskCode(), libUser.getUserName());
+        log.info("主管复核通过，借用单：{}，主管：{}，意见：{}", order.getOrderNo(), supervisor.getUserName(), reviewRemark);
+        return order;
+    }
 
+    @Transactional(rollbackFor = Exception.class)
+    public BorrowOrder supervisorReviewReject(Long orderId, Long supervisorId, String reviewRemark) {
+        BorrowOrder order = this.getById(orderId);
+        if (order == null) {
+            throw new BusinessException("借用单不存在");
+        }
+        if (!"SUPERVISOR_REVIEW".equals(order.getOrderStatus())) {
+            throw new BusinessException("借用单当前状态不可主管复核");
+        }
+
+        SysUser supervisor = sysUserService.getById(supervisorId);
+        if (supervisor == null) {
+            throw new BusinessException("主管不存在");
+        }
+        if (!"SUPERVISOR".equals(supervisor.getRoleType())) {
+            throw new BusinessException("只有工艺主管可以复核");
+        }
+
+        order.setSupervisorReviewStatus("REJECTED");
+        order.setSupervisorReviewUserId(supervisorId);
+        order.setSupervisorReviewTime(LocalDateTime.now());
+        order.setSupervisorReviewRemark(reviewRemark);
+        order.setOrderStatus("REJECTED");
+        this.updateById(order);
+
+        MaskInfo mask = maskInfoService.getById(order.getMaskId());
+        if (mask != null && "BORROWED".equals(mask.getStatus())) {
+            if (order.getOutLocationId() != null) {
+                mask.setLocationId(order.getOutLocationId());
+                storageLocationService.incrementCount(order.getOutLocationId());
+            }
+            mask.setStatus("IN_STOCK");
+            maskInfoService.updateById(mask);
+        }
+
+        BorrowApplication application = borrowApplicationService.getById(order.getApplyId());
+        if (application != null) {
+            application.setApplyStatus("REJECTED");
+            borrowApplicationService.updateById(application);
+        }
+
+        log.info("主管复核驳回，借用单：{}，主管：{}，原因：{}", order.getOrderNo(), supervisor.getUserName(), reviewRemark);
         return order;
     }
 
@@ -210,6 +323,8 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
         }
 
         storageLocationService.incrementCount(locationId);
+
+        maskLocationMoveService.recordInStockMove(order, mask, locationId, libUserId, libUser.getUserName());
 
         mask.setStatus("IN_STOCK");
         mask.setLocationId(locationId);
@@ -262,6 +377,22 @@ public class BorrowOrderService extends ServiceImpl<BorrowOrderMapper, BorrowOrd
         order.setAppearanceCheckRemark(checkRemark);
         order.setAppearanceCheckUserId(checkUserId);
         order.setAppearanceCheckTime(LocalDateTime.now());
+
+        if ("SCRATCH".equals(checkResult) || "FAIL".equals(checkResult)) {
+            order.setIsAbnormal(1);
+            order.setAbnormalRemark("外观检查发现划伤/不合格：" + checkRemark);
+
+            AnomalyHandleOrder anomaly = anomalyHandleOrderService.createFromScratchDamage(
+                    order, "外观检查发现划伤：" + checkRemark, checkUserId, checkUser.getUserName());
+
+            anomalyHandleOrderService.freezeSameBatchBorrowOrders(order.getMachineBatch());
+
+            order.setBatchFreezeFlag(1);
+
+            log.warn("外观检查发现划伤！借用单：{}，批次：{}，已生成异常处理单：{}，同批次后续借用已冻结",
+                    order.getOrderNo(), order.getMachineBatch(), anomaly.getAnomalyNo());
+        }
+
         this.updateById(order);
 
         log.info("光罩外观检查完成，借用单号：{}，结果：{}，检查人：{}",
