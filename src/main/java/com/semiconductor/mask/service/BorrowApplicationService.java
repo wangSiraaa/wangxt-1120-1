@@ -29,9 +29,6 @@ public class BorrowApplicationService extends ServiceImpl<BorrowApplicationMappe
     @Autowired
     private SysUserService sysUserService;
 
-    @Autowired
-    private BorrowOrderService borrowOrderService;
-
     public IPage<BorrowApplication> pageQuery(Integer pageNum, Integer pageSize, String applyNo, Long applicantId, Long maskId, String applyStatus, Integer isAbnormal) {
         Page<BorrowApplication> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<BorrowApplication> wrapper = new LambdaQueryWrapper<>();

@@ -3,6 +3,7 @@
 CREATE DATABASE IF NOT EXISTS mask_manage DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE mask_manage;
+SET NAMES utf8mb4;
 
 -- 1. 用户表
 DROP TABLE IF EXISTS sys_user;
@@ -212,11 +213,11 @@ INSERT INTO sys_user (user_code, user_name, role_type, clean_level, phone, email
 ('SUP001', '赵主管', 'SUPERVISOR', 'CLASS_10', '13800138004', 'zhao@semiconductor.com');
 
 INSERT INTO storage_location (location_code, location_name, clean_level, area, row_num, col_num, layer_num, capacity, current_count) VALUES
-('LOC-A-01-01', 'A区1排1列1层', 'CLASS_10', 'A区', 1, 1, 1, 5, 0),
-('LOC-A-01-02', 'A区1排1列2层', 'CLASS_10', 'A区', 1, 1, 2, 5, 0),
-('LOC-B-01-01', 'B区1排1列1层', 'CLASS_100', 'B区', 1, 1, 1, 10, 0),
-('LOC-B-01-02', 'B区1排1列2层', 'CLASS_100', 'B区', 1, 1, 2, 10, 0),
-('LOC-C-01-01', 'C区1排1列1层', 'CLASS_1000', 'C区', 1, 1, 1, 20, 0);
+('LOC-A-01-01', 'A区1排1列1层', 'CLASS_10', 'A区', 1, 1, 1, 5, 1),
+('LOC-A-01-02', 'A区1排1列2层', 'CLASS_10', 'A区', 1, 1, 2, 5, 1),
+('LOC-B-01-01', 'B区1排1列1层', 'CLASS_100', 'B区', 1, 1, 1, 10, 1),
+('LOC-B-01-02', 'B区1排1列2层', 'CLASS_100', 'B区', 1, 1, 2, 10, 1),
+('LOC-C-01-01', 'C区1排1列1层', 'CLASS_1000', 'C区', 1, 1, 1, 20, 1);
 
 INSERT INTO mask_info (mask_code, mask_name, mask_type, clean_level, last_calibration_date, calibration_cycle_days, next_calibration_date, location_id, status, spec) VALUES
 ('MASK-001', '光罩A-1号', '铬版', 'CLASS_10', '2026-05-01', 90, '2026-07-30', 1, 'IN_STOCK', '6英寸 0.13um工艺'),
